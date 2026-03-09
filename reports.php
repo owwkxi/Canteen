@@ -1,6 +1,31 @@
 <?php
 require_once 'includes/config.php';
 requireLogin();
+// ── Access guard ─────────────────────────────────────────────────────────
+if (($_SESSION["role"] ?? "") === "staff") {
+    // Resolve job_role if not in session (handles users logged in before this update)
+    if (!isset($_SESSION["job_role"]) || $_SESSION["job_role"] === null) {
+        $db = getDB();
+        if (!empty($_SESSION["staff_db_id"])) {
+            $sid = (int)$_SESSION["staff_db_id"];
+            $jr  = $db->query("SELECT role FROM staff WHERE id=$sid")->fetch_assoc();
+        } else {
+            $uid    = (int)$_SESSION["user_id"];
+            $urow   = $db->query("SELECT username, full_name FROM users WHERE id=$uid")->fetch_assoc();
+            $un_esc = $db->real_escape_string(strtolower($urow["username"] ?? ""));
+            $fn_esc = $db->real_escape_string($urow["full_name"] ?? "");
+            $jr     = $db->query("SELECT id, role FROM staff WHERE LOWER(staff_id)=\"$un_esc\" OR full_name=\"$fn_esc\" LIMIT 1")->fetch_assoc();
+            $_SESSION["staff_db_id"] = $jr["id"] ?? null;
+        }
+        $_SESSION["job_role"] = $jr["role"] ?? null;
+    }
+}
+if (($_SESSION["role"] ?? "") === "staff") {
+    if (($_SESSION["job_role"] ?? "") !== "Cashier") {
+        header("Location: staff_attendance.php"); exit;
+    }
+}
+
 $page_title = 'Daily Reports – Canteen Management';
 $db = getDB();
 
@@ -135,7 +160,7 @@ include 'includes/header.php';
     <div class="col-6 col-md-3">
         <div class="c-card p-3">
             <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#999;">
-                Total Invoices
+                Total Sales
             </div>
             <div style="font-size:1.9rem;font-weight:700;color:var(--maroon);margin-top:6px;line-height:1;">
                 <?= number_format($stats['total_invoices']) ?>
@@ -222,7 +247,7 @@ include 'includes/header.php';
                 <div style="height:6px;background:#f0eeec;border-radius:4px;overflow:hidden;">
                     <div style="height:100%;width:<?= $pct ?>%;background:<?= $bar_color ?>;border-radius:4px;transition:width .4s;"></div>
                 </div>
-                <div style="font-size:.72rem;color:#bbb;margin-top:3px;"><?= $s['txn'] ?> invoice<?= $s['txn']!=1?'s':'' ?> &nbsp;·&nbsp; <?= $pct ?>%</div>
+                <div style="font-size:.72rem;color:#bbb;margin-top:3px;"><?= $s['txn'] ?> sale<?= $s['txn']!=1?'s':'' ?> &nbsp;·&nbsp; <?= $pct ?>%</div>
             </div>
             <?php endforeach; ?>
             <div class="mt-3 pt-3" style="border-top:1px solid #f0eeec;">
@@ -240,7 +265,7 @@ include 'includes/header.php';
 <div class="c-card">
     <div style="padding:16px 20px 0;border-bottom:1px solid #f0eeec;">
         <span style="font-size:.85rem;font-weight:700;color:#444;">
-            Invoices
+            Sales
         </span>
         <span style="font-size:.8rem;color:#bbb;margin-left:8px;"><?= $total_rows ?> record<?= $total_rows!=1?'s':'' ?></span>
     </div>
@@ -248,7 +273,7 @@ include 'includes/header.php';
     <table class="c-table">
         <thead>
             <tr>
-                <th>Invoice No</th>
+                <th>Sale No</th>
                 <th>Branch</th>
                 <th>Date</th>
                 <th>Items</th>

@@ -10,7 +10,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'add') {
         $username  = sanitize($_POST['username']);
         $full_name = sanitize($_POST['full_name']);
-        $role      = in_array($_POST['role'], ['staff','admin','super_admin']) ? $_POST['role'] : 'staff';
+        $role      = in_array($_POST['role'], ['admin','super_admin']) ? $_POST['role'] : 'admin';
         $password  = password_hash($_POST['password'], PASSWORD_DEFAULT);
         $stmt = $db->prepare("INSERT INTO users (username, full_name, role, password) VALUES (?,?,?,?)");
         $stmt->bind_param("ssss", $username, $full_name, $role, $password);
@@ -25,7 +25,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'edit') {
         $uid       = (int)$_POST['user_id'];
         $full_name = sanitize($_POST['full_name']);
-        $role      = in_array($_POST['role'], ['staff','admin','super_admin']) ? $_POST['role'] : 'staff';
+        $role      = in_array($_POST['role'], ['admin','super_admin']) ? $_POST['role'] : 'admin';
         if ($uid === (int)$_SESSION['user_id'] && $role !== 'super_admin') {
             $_SESSION['toast'] = ['msg' => 'You cannot change your own role.', 'type' => 'error'];
             header('Location: system_user.php'); exit;
@@ -56,7 +56,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $users = $db->query("SELECT id, username, full_name, role, created_at FROM users
-    ORDER BY FIELD(role,'super_admin','admin','staff'), full_name")->fetch_all(MYSQLI_ASSOC);
+    WHERE role IN ('admin','super_admin')
+    ORDER BY FIELD(role,'super_admin','admin'), full_name")->fetch_all(MYSQLI_ASSOC);
 
 include 'includes/header.php';
 ?> <div class="d-flex align-items-center justify-content-between mb-4">
@@ -73,16 +74,16 @@ include 'includes/header.php';
 <div class="d-flex flex-wrap gap-3 mb-4">
     <div class="c-card px-3 py-2 d-flex align-items-center gap-2">
         <span class="role-badge super_admin">Super Admin</span>
-        <span style="font-size:.8rem;color:#666;">Full access — everything</span>
+        <span style="font-size:.8rem;color:#666;">Full access — everything including System Users</span>
     </div>
     <div class="c-card px-3 py-2 d-flex align-items-center gap-2">
         <span class="role-badge admin">Admin</span>
-        <span style="font-size:.8rem;color:#666;">Staff access + Staff Management</span>
+        <span style="font-size:.8rem;color:#666;">Full access except System Users management</span>
     </div>
-    <div class="c-card px-3 py-2 d-flex align-items-center gap-2">
-        <span class="role-badge staff">Staff</span>
-        <span style="font-size:.8rem;color:#666;">Dashboard, Products, Stock, Attendance</span>
-    </div>
+</div>
+<div class="alert alert-info d-flex align-items-center gap-2 mb-4" style="font-size:.85rem;border-radius:10px;">
+    <i class="bi bi-info-circle-fill"></i>
+    <span>Staff accounts are managed in <a href="staff.php" style="color:var(--maroon);font-weight:600;">Staff Management</a>. Add staff there to assign them a login.</span>
 </div>
 
 <div class="c-card">
@@ -155,13 +156,10 @@ include 'includes/header.php';
                         <div class="col-12">
                             <label class="form-label">Role</label>
                             <select name="role" id="addRoleSelect" class="form-select" onchange="updateRoleHint(this,'addRoleHint')">
-                                <option value="staff">Staff</option>
                                 <option value="admin">Admin</option>
                                 <option value="super_admin">Super Admin</option>
                             </select>
-                            <small id="addRoleHint" class="text-muted mt-1 d-block">
-                                Can access: Dashboard, Products, Stock Management, Attendance
-                            </small>
+                            <small id="addRoleHint" class="text-muted mt-1 d-block"></small>
                         </div>
                     </div>
                 </div>
@@ -198,7 +196,6 @@ include 'includes/header.php';
                         <div class="col-12">
                             <label class="form-label">Role</label>
                             <select name="role" id="editRole" class="form-select" onchange="updateRoleHint(this,'editRoleHint')">
-                                <option value="staff">Staff</option>
                                 <option value="admin">Admin</option>
                                 <option value="super_admin">Super Admin</option>
                             </select>
@@ -231,9 +228,8 @@ include 'includes/header.php';
 
 <script>
 const roleHints = {
-    staff:       'Can access: Dashboard, Products, Stock Management, Attendance',
-    admin:       'Can access: Everything Staff can + Staff Management',
-    super_admin: 'Can access: Everything including Daily Reports & System User'
+    admin:       'Can access: Dashboard, Products, Stock, Reports, Staff Management — cannot manage System Users',
+    super_admin: 'Can access: Everything including System Users management'
 };
 function updateRoleHint(sel, hintId) {
     document.getElementById(hintId).textContent = roleHints[sel.value] || '';

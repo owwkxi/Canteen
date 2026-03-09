@@ -1,19 +1,45 @@
 <?php
 require_once 'includes/config.php';
 requireLogin();
+// ── Access guard ─────────────────────────────────────────────────────────
+if (($_SESSION["role"] ?? "") === "staff") {
+    // Resolve job_role if not in session (handles users logged in before this update)
+    if (!isset($_SESSION["job_role"]) || $_SESSION["job_role"] === null) {
+        $db = getDB();
+        if (!empty($_SESSION["staff_db_id"])) {
+            $sid = (int)$_SESSION["staff_db_id"];
+            $jr  = $db->query("SELECT role FROM staff WHERE id=$sid")->fetch_assoc();
+        } else {
+            $uid    = (int)$_SESSION["user_id"];
+            $urow   = $db->query("SELECT username, full_name FROM users WHERE id=$uid")->fetch_assoc();
+            $un_esc = $db->real_escape_string(strtolower($urow["username"] ?? ""));
+            $fn_esc = $db->real_escape_string($urow["full_name"] ?? "");
+            $jr     = $db->query("SELECT id, role FROM staff WHERE LOWER(staff_id)=\"$un_esc\" OR full_name=\"$fn_esc\" LIMIT 1")->fetch_assoc();
+            $_SESSION["staff_db_id"] = $jr["id"] ?? null;
+        }
+        $_SESSION["job_role"] = $jr["role"] ?? null;
+    }
+}
+if (($_SESSION["role"] ?? "") === "staff") {
+    if (($_SESSION["job_role"] ?? "") !== "Cashier") {
+        header("Location: staff_attendance.php"); exit;
+    }
+}
+
 $page_title = 'Dashboard – Canteen Management';
 $db = getDB();
 
 // Sales chart data
 $chartData = [];
-$branches = $db->query("SELECT id, name, code FROM branches ORDER BY id")->fetch_all(MYSQLI_ASSOC);
-$dates = $db->query("SELECT DISTINCT sale_date FROM sales ORDER BY sale_date DESC LIMIT 7")->fetch_all(MYSQLI_ASSOC);
-$dates = array_reverse($dates);
+$branches  = $db->query("SELECT id, name, code FROM branches ORDER BY id")->fetch_all(MYSQLI_ASSOC);
+$dates     = $db->query("SELECT DISTINCT sale_date FROM sales ORDER BY sale_date DESC LIMIT 7")->fetch_all(MYSQLI_ASSOC);
+$dates     = array_reverse($dates);
 
 foreach ($dates as $d) {
     $row = ['date' => date('m-d', strtotime($d['sale_date']))];
     foreach ($branches as $b) {
-        $r = $db->query("SELECT COALESCE(SUM(total_amount),0) as total FROM sales WHERE branch_id={$b['id']} AND sale_date='{$d['sale_date']}'")->fetch_assoc();
+        $r = $db->query("SELECT COALESCE(SUM(total_amount),0) as total FROM sales
+                          WHERE branch_id={$b['id']} AND sale_date='{$d['sale_date']}'")->fetch_assoc();
         $row[$b['code']] = (float)$r['total'];
     }
     $chartData[] = $row;
@@ -22,13 +48,15 @@ foreach ($dates as $d) {
 // Stock overview per branch
 $stockOverview = [];
 foreach ($branches as $b) {
-    $items = $db->query("SELECT p.product_id, p.name, s.quantity FROM stocks s JOIN products p ON p.id=s.product_id WHERE s.branch_id={$b['id']} ORDER BY s.quantity ASC LIMIT 3")->fetch_all(MYSQLI_ASSOC);
+    $items = $db->query("SELECT p.product_id, p.name, s.quantity FROM stocks s
+                          JOIN products p ON p.id=s.product_id
+                          WHERE s.branch_id={$b['id']}
+                          ORDER BY s.quantity ASC LIMIT 3")->fetch_all(MYSQLI_ASSOC);
     $stockOverview[$b['id']] = ['branch' => $b, 'items' => $items];
 }
 
 include 'includes/header.php';
 ?>
-<!-- Dashboard -->
 <div class="mb-4 d-flex align-items-center justify-content-between">
     <div>
         <div class="page-title">Dashboard</div>
@@ -49,7 +77,7 @@ include 'includes/header.php';
     <div class="col-lg-3">
         <div class="c-card p-4">
             <div class="section-title mb-3">Quick Actions</div>
-            <a href="invoice.php" class="quick-btn primary"><i class="bi bi-receipt me-2"></i>Create Invoice</a>
+            <a href="invoice.php" class="quick-btn primary"><i class="bi bi-receipt me-2"></i>Record Product Sold</a>
             <a href="add_product.php" class="quick-btn secondary">Add Product</a>
             <a href="stock.php" class="quick-btn secondary">Update Stock</a>
             <a href="add_staff.php" class="quick-btn secondary">Add Staff</a>
@@ -60,7 +88,7 @@ include 'includes/header.php';
 <!-- Stock Overview -->
 <div class="row g-3 mt-2">
     <?php foreach ($stockOverview as $so): ?>
-    <div class="col-md-4">`
+    <div class="col-md-4">
         <div class="stock-card">
             <div class="d-flex align-items-center justify-content-between mb-1">
                 <span class="branch-name"><?= htmlspecialchars($so['branch']['name']) ?></span>
@@ -69,9 +97,9 @@ include 'includes/header.php';
             <div class="last-updated">Last updated: Today, <?= date('h:iA') ?></div>
             <?php foreach ($so['items'] as $item):
                 $qty = (int)$item['quantity'];
-                if ($qty === 0) { $cls = 'status-out'; $label = 'out of stock'; $hint = 'order stocks now'; }
+                if ($qty === 0)    { $cls = 'status-out'; $label = 'out of stock'; $hint = 'order stocks now'; }
                 elseif ($qty <= 5) { $cls = 'status-low'; $label = 'low in stock'; $hint = 'refill stocks now'; }
-                else { $cls = 'status-high'; $label = 'high stock'; $hint = 'stocks are high'; }
+                else               { $cls = 'status-high'; $label = 'high stock';  $hint = 'stocks are high'; }
             ?>
             <div class="stock-item">
                 <div class="d-flex align-items-center gap-3">
@@ -94,10 +122,10 @@ include 'includes/header.php';
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
-const chartData = <?= json_encode($chartData) ?>;
-const labels = chartData.map(d => d.date);
-const colors = ['#5C7AEA','#FF8C42','#C77DFF'];
-const branchKeys = <?= json_encode(array_column($branches, 'code')) ?>;
+const chartData   = <?= json_encode($chartData) ?>;
+const labels      = chartData.map(d => d.date);
+const colors      = ['#5C7AEA','#FF8C42','#C77DFF'];
+const branchKeys  = <?= json_encode(array_column($branches, 'code')) ?>;
 const branchNames = <?= json_encode(array_column($branches, 'name')) ?>;
 
 new Chart(document.getElementById('salesChart'), {

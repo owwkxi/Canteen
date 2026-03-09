@@ -1,6 +1,12 @@
 <?php
 require_once 'includes/config.php';
 requireLogin();
+// ── Access guard: admin only ─────────────────────────────────────────────
+$_role = $_SESSION["role"] ?? "";
+if ($_role !== "admin" && $_role !== "super_admin") {
+    header("Location: dashboard.php"); exit;
+}
+
 $db = getDB();
 $id = (int)($_GET['id'] ?? 0);
 $member = $db->query("SELECT s.*, b.name as branch_name FROM staff s LEFT JOIN branches b ON b.id=s.branch_id WHERE s.id=$id")->fetch_assoc();

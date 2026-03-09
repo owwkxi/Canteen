@@ -15,6 +15,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $_SESSION['user_id']   = $user['id'];
         $_SESSION['full_name'] = $user['full_name'];
         $_SESSION['role']      = $user['role'];
+
+        // Look up staff job role (Cashier / Manager / Cook / Helper) via user_id JOIN
+        $_SESSION['job_role'] = null;
+        if ($user['role'] === 'staff') {
+            $new_uid = (int)$user['id'];
+            $jr_row  = $db->query(
+                "SELECT s.role FROM staff s
+                 JOIN users u ON (LOWER(u.username) = LOWER(s.staff_id) OR u.full_name = s.full_name)
+                 WHERE u.id = $new_uid LIMIT 1"
+            )->fetch_assoc();
+            $_SESSION['job_role'] = $jr_row['role'] ?? null;
+        }
         header('Location: dashboard.php'); exit;
     } else {
         $error = 'Invalid username or password.';

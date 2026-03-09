@@ -1,6 +1,31 @@
 <?php
 require_once 'includes/config.php';
 requireLogin();
+// ── Access guard ─────────────────────────────────────────────────────────
+if (($_SESSION["role"] ?? "") === "staff") {
+    // Resolve job_role if not in session (handles users logged in before this update)
+    if (!isset($_SESSION["job_role"]) || $_SESSION["job_role"] === null) {
+        $db = getDB();
+        if (!empty($_SESSION["staff_db_id"])) {
+            $sid = (int)$_SESSION["staff_db_id"];
+            $jr  = $db->query("SELECT role FROM staff WHERE id=$sid")->fetch_assoc();
+        } else {
+            $uid    = (int)$_SESSION["user_id"];
+            $urow   = $db->query("SELECT username, full_name FROM users WHERE id=$uid")->fetch_assoc();
+            $un_esc = $db->real_escape_string(strtolower($urow["username"] ?? ""));
+            $fn_esc = $db->real_escape_string($urow["full_name"] ?? "");
+            $jr     = $db->query("SELECT id, role FROM staff WHERE LOWER(staff_id)=\"$un_esc\" OR full_name=\"$fn_esc\" LIMIT 1")->fetch_assoc();
+            $_SESSION["staff_db_id"] = $jr["id"] ?? null;
+        }
+        $_SESSION["job_role"] = $jr["role"] ?? null;
+    }
+}
+if (($_SESSION["role"] ?? "") === "staff") {
+    if (($_SESSION["job_role"] ?? "") !== "Cashier") {
+        header("Location: staff_attendance.php"); exit;
+    }
+}
+
 $db = getDB();
 $id = (int)($_GET['id'] ?? 0);
 $row = $db->query("SELECT s.*, p.product_id as pid, p.name, c.name as cat_name FROM stocks s JOIN products p ON p.id=s.product_id LEFT JOIN categories c ON c.id=p.category_id WHERE s.id=$id")->fetch_assoc();

@@ -1,28 +1,36 @@
 <?php
 require_once 'includes/config.php';
 requireLogin();
-$page_title = 'Add Product – Canteen Management';
-$db = getDB();
-$categories = $db->query("SELECT * FROM categories ORDER BY name")->fetch_all(MYSQLI_ASSOC);
-$branches   = $db->query("SELECT * FROM branches ORDER BY id")->fetch_all(MYSQLI_ASSOC);
-
-// Build next-ID preview for each category (used by JS live preview)
-$next_ids = [];
-foreach ($categories as $c) {
-    $prefix = $c['prefix'] ?? null;
-    if ($prefix) {
-        $p      = $db->real_escape_string($prefix);
-        $plen   = strlen($prefix) + 1;
-        $last   = $db->query("SELECT product_id FROM products
-                               WHERE product_id LIKE '{$p}%'
-                               ORDER BY CAST(SUBSTRING(product_id, $plen) AS UNSIGNED) DESC
-                               LIMIT 1")->fetch_assoc();
-        $num    = $last ? ((int)substr($last['product_id'], strlen($prefix)) + 1) : 1;
-        $next_ids[$c['id']] = $prefix . str_pad($num, 2, '0', STR_PAD_LEFT);
-    } else {
-        $next_ids[$c['id']] = null;
+// ── Access guard ─────────────────────────────────────────────────────────
+if (($_SESSION["role"] ?? "") === "staff") {
+    // Resolve job_role if not in session (handles users logged in before this update)
+    if (!isset($_SESSION["job_role"]) || $_SESSION["job_role"] === null) {
+        $db = getDB();
+        if (!empty($_SESSION["staff_db_id"])) {
+            $sid = (int)$_SESSION["staff_db_id"];
+            $jr  = $db->query("SELECT role FROM staff WHERE id=$sid")->fetch_assoc();
+        } else {
+            $uid    = (int)$_SESSION["user_id"];
+            $urow   = $db->query("SELECT username, full_name FROM users WHERE id=$uid")->fetch_assoc();
+            $un_esc = $db->real_escape_string(strtolower($urow["username"] ?? ""));
+            $fn_esc = $db->real_escape_string($urow["full_name"] ?? "");
+            $jr     = $db->query("SELECT id, role FROM staff WHERE LOWER(staff_id)=\"$un_esc\" OR full_name=\"$fn_esc\" LIMIT 1")->fetch_assoc();
+            $_SESSION["staff_db_id"] = $jr["id"] ?? null;
+        }
+        $_SESSION["job_role"] = $jr["role"] ?? null;
     }
 }
+if (($_SESSION["role"] ?? "") === "staff") {
+    if (($_SESSION["job_role"] ?? "") !== "Cashier") {
+        header("Location: staff_attendance.php"); exit;
+    }
+}
+
+$page_title = 'Add Product – Canteen Management';
+$db = getDB();
+
+$categories = $db->query("SELECT * FROM categories ORDER BY name")->fetch_all(MYSQLI_ASSOC);
+$branches   = $db->query("SELECT * FROM branches ORDER BY id")->fetch_all(MYSQLI_ASSOC);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $name       = sanitize($_POST['name']);
@@ -47,7 +55,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $product_id = $prefix . str_pad($num, 2, '0', STR_PAD_LEFT);
         }
     }
-    // Fallback for categories with no prefix configured
     if (!$product_id) {
         $last_gen   = $db->query("SELECT product_id FROM products WHERE product_id LIKE 'GEN%'
                                    ORDER BY id DESC LIMIT 1")->fetch_assoc();
@@ -72,6 +79,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = 'Failed to add product. Please try again.';
     }
 }
+
 include 'includes/header.php';
 ?>
 <div class="page-title mb-4">Add Product</div>
@@ -80,39 +88,30 @@ include 'includes/header.php';
     <?php if (!empty($error)): ?>
     <div class="alert alert-danger mb-3"><?= $error ?></div>
     <?php endif; ?>
+
     <form method="POST">
         <div class="row g-4">
             <div class="col-md-7">
                 <div class="section-title">Basic Information</div>
+
                 <div class="mb-3">
-                    <label class="form-label">Product Name :</label>
-                    <input type="text" name="name" class="form-control" required>
+                    <label class="form-label">Product Name <span class="text-danger">*</span></label>
+                    <input type="text" name="name" class="form-control"
+                           value="<?= htmlspecialchars($_POST['name'] ?? '') ?>" required>
                 </div>
 
                 <div class="mb-3">
-                    <label class="form-label">Product ID :</label>
-                    <div class="d-flex align-items-center gap-2">
-                        <input type="text" id="product_id_preview" class="form-control"
-                               style="background:#f5f5f5;font-weight:600;max-width:150px;"
-                               value="Select category first" readonly>
-                        <span style="font-size:.8rem;color:#999;"><i class="bi bi-magic"></i> Auto-generated</span>
-                    </div>
-                </div>
-
-                <div class="mb-3">
-                    <label class="form-label">Category: <span class="text-danger">*</span></label>
-                    <select name="category_id" id="category_select" class="form-select" required>
+                    <label class="form-label">Category <span class="text-danger">*</span></label>
+                    <select name="category_id" class="form-select" required>
                         <option value="">Select category</option>
                         <?php foreach ($categories as $c): ?>
                         <option value="<?= $c['id'] ?>"
-                                data-next="<?= htmlspecialchars($next_ids[$c['id']] ?? 'GEN-series') ?>">
+                                <?= ($_POST['category_id'] ?? '') == $c['id'] ? 'selected' : '' ?>>
                             <?= htmlspecialchars($c['name']) ?>
-                            <?php if (!empty($c['prefix'])): ?>
-                                (<?= htmlspecialchars($c['prefix']) ?>-series)
-                            <?php endif; ?>
                         </option>
                         <?php endforeach; ?>
                     </select>
+                    <div class="form-text">Product ID is automatically assigned based on category.</div>
                 </div>
 
                 <div class="section-title mt-4">Availability</div>
@@ -121,8 +120,11 @@ include 'includes/header.php';
                     <?php foreach ($branches as $b): ?>
                     <div class="form-check">
                         <input class="form-check-input" type="checkbox" name="branches[]"
-                               value="<?= $b['id'] ?>" id="b<?= $b['id'] ?>">
-                        <label class="form-check-label" for="b<?= $b['id'] ?>"><?= htmlspecialchars($b['name']) ?></label>
+                               value="<?= $b['id'] ?>" id="b<?= $b['id'] ?>"
+                               <?= in_array($b['id'], $_POST['branches'] ?? []) ? 'checked' : '' ?>>
+                        <label class="form-check-label" for="b<?= $b['id'] ?>">
+                            <?= htmlspecialchars($b['name']) ?>
+                        </label>
                     </div>
                     <?php endforeach; ?>
                 </div>
@@ -131,29 +133,16 @@ include 'includes/header.php';
             <div class="col-md-5">
                 <div class="section-title">Pricing</div>
                 <div class="mb-3">
-                    <label class="form-label">Cost Price :</label>
-                    <input type="number" name="cost_price" class="form-control" step="0.01" min="0" required>
+                    <label class="form-label">Cost Price <span class="text-danger">*</span></label>
+                    <input type="number" name="cost_price" class="form-control"
+                           step="0.01" min="0"
+                           value="<?= htmlspecialchars($_POST['cost_price'] ?? '') ?>" required>
                 </div>
                 <div class="mb-3">
-                    <label class="form-label">Selling Price :</label>
-                    <input type="number" name="selling_price" class="form-control" step="0.01" min="0" required>
-                </div>
-
-                <!-- ID series reference card -->
-                <div class="mt-4 p-3" style="background:#faf8f6;border-radius:10px;border:1px solid #e8e3de;">
-                    <div style="font-size:.75rem;font-weight:700;color:#888;text-transform:uppercase;
-                                letter-spacing:.06em;margin-bottom:10px;">ID Series Reference</div>
-                    <?php foreach ($categories as $c): if (empty($c['prefix'])) continue; ?>
-                    <div class="d-flex justify-content-between" style="font-size:.82rem;color:#555;padding:3px 0;">
-                        <span>
-                            <strong style="color:var(--maroon);min-width:28px;display:inline-block;">
-                                <?= htmlspecialchars($c['prefix']) ?>
-                            </strong>
-                            <?= htmlspecialchars($c['name']) ?>
-                        </span>
-                        <span style="color:#aaa;">next: <?= htmlspecialchars($next_ids[$c['id']] ?? '—') ?></span>
-                    </div>
-                    <?php endforeach; ?>
+                    <label class="form-label">Selling Price <span class="text-danger">*</span></label>
+                    <input type="number" name="selling_price" class="form-control"
+                           step="0.01" min="0"
+                           value="<?= htmlspecialchars($_POST['selling_price'] ?? '') ?>" required>
                 </div>
             </div>
         </div>
@@ -164,24 +153,4 @@ include 'includes/header.php';
         </div>
     </form>
 </div>
-
-<script>
-// Live preview: show what ID will be assigned when category is selected
-const nextIds = <?= json_encode($next_ids) ?>;
-
-document.getElementById('category_select').addEventListener('change', function () {
-    const preview = document.getElementById('product_id_preview');
-    const catId   = this.value;
-    if (catId && nextIds[catId]) {
-        preview.value = nextIds[catId];
-        preview.style.color = 'var(--maroon)';
-    } else if (catId) {
-        preview.value = 'GEN-series';
-        preview.style.color = '#888';
-    } else {
-        preview.value = 'Select category first';
-        preview.style.color = '#999';
-    }
-});
-</script>
 <?php include 'includes/footer.php'; ?>
