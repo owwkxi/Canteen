@@ -150,7 +150,7 @@ include 'includes/header.php';
                 <td><?= htmlspecialchars($p['canteens'] ?? '—') ?></td>
                 <td>
                     <div class="d-flex gap-2">
-                        <a href="edit_product.php?id=<?= $p['id'] ?>" class="btn-edit btn btn-sm">Edit</a>
+                        <a href="edit_product.php?id=<?= $p['id'] ?>" class="btn btn-edit2 btn-sm">Edit</a>
 
                         <!-- Delete button triggers confirmation modal -->
                         <button type="button" class="btn btn-sm"
