@@ -112,7 +112,7 @@ include 'includes/header.php';
             <?php foreach ($stocks as $s):
                 $qty = (int)$s['quantity'];
                 if ($qty === 0)    { $cls = 'status-out';  $label = 'out of stock'; }
-                elseif ($qty <= 5) { $cls = 'status-low';  $label = 'low in stock'; }
+                elseif ($qty <= 15) { $cls = 'status-low';  $label = 'low in stock'; }
                 else               { $cls = 'status-high'; $label = 'high stock'; }
             ?>
             <tr>
