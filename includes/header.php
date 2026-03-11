@@ -362,22 +362,23 @@ if (!in_array($current_page, $allowed)) {
         </li>
         <?php endif; ?>
 
-        <!-- Daily Reports — super_admin only -->
+       <!-- Daily Reports — super_admin only -->
         <?php if (hasRole('super_admin')): ?>
         <li class="nav-item">
-            <a href="reports.php" class="nav-link <?= $current_page === 'reports' ? 'active' : '' ?>">
+            <a href="reports.php" class="nav-link <?= in_array($current_page, ['reports','invoice']) ? 'active' : '' ?>">
                 <i class="bi bi-file-earmark-text"></i> Daily Reports
             </a>
         </li>
+        <?php if (in_array($current_page, ['reports','invoice'])): ?>
+        <ul class="sub-nav">
+            <li><a href="reports.php" class="nav-link <?= $current_page === 'reports' ? 'active' : '' ?>">
+                <i class="bi bi-caret-right-fill"></i> Reports
+            </a></li>
+            <li><a href="invoice.php" class="nav-link <?= $current_page === 'invoice' ? 'active' : '' ?>">
+                <i class="bi bi-caret-right-fill"></i> Invoice
+            </a></li>
+        </ul>
         <?php endif; ?>
-
-        <!-- System User — super_admin only -->
-        <?php if (hasRole('super_admin')): ?>
-        <li class="nav-item">
-            <a href="system_user.php" class="nav-link <?= $current_page === 'system_user' ? 'active' : '' ?>">
-                <i class="bi bi-shield-lock"></i> System User
-            </a>
-        </li>
         <?php endif; ?>
 
     </ul>
