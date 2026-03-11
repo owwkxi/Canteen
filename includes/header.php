@@ -381,6 +381,15 @@ if (!in_array($current_page, $allowed)) {
         <?php endif; ?>
         <?php endif; ?>
 
+        <!-- System Users — super_admin only -->
+        <?php if (hasRole('super_admin')): ?>
+        <li class="nav-item">
+            <a href="system_user.php" class="nav-link <?= $current_page === 'system_user' ? 'active' : '' ?>">
+                <i class="bi bi-shield-lock"></i> System Users
+            </a>
+        </li>
+        <?php endif; ?>
+
     </ul>
     <form method="POST" action="logout.php">
         <button type="submit" class="logout-btn">
