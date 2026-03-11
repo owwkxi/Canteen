@@ -236,7 +236,6 @@ include 'includes/header.php';
     <?php if ($is_admin): ?>
     <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
         <form method="GET" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-            <input type="date" name="date" class="form-control form-control-sm" style="width:155px;" value="<?= $date_view ?>">
             <select name="branch" class="form-select form-select-sm" style="width:155px;">
                 <option value="">All Branches</option>
                 <?php foreach ($branches as $b): ?>
