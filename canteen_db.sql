@@ -35,7 +35,7 @@ CREATE TABLE `attendance` (
   `time_out` time DEFAULT NULL,
   `status` enum('Present','Absent','Late','Half Day') DEFAULT 'Present',
   `notes` varchar(255) DEFAULT NULL,
-  `recorded_by` int(11) DEFAULT NULL,
+  `recorded_by` int(11) DEFAULT NULL, -- References users(id), enforced via FK below
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
@@ -48,7 +48,8 @@ CREATE TABLE `attendance` (
 CREATE TABLE `branches` (
   `id` int(11) NOT NULL,
   `name` varchar(100) NOT NULL,
-  `code` varchar(20) NOT NULL
+  `code` varchar(20) NOT NULL,
+  `address` varchar(255) DEFAULT NULL -- Physical location of the branch
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
@@ -137,7 +138,7 @@ CREATE TABLE `sales` (
   `total_amount` decimal(10,2) NOT NULL DEFAULT 0.00,
   `sale_date` date NOT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
-  `submitted_by_staff` int(11) DEFAULT NULL
+  `submitted_by_staff` int(11) DEFAULT NULL -- References staff(id), enforced via FK below
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
@@ -209,6 +210,7 @@ CREATE TABLE `stocks` (
   `product_id` int(11) NOT NULL,
   `branch_id` int(11) NOT NULL,
   `quantity` int(11) NOT NULL DEFAULT 0,
+  `reorder_level` int(11) NOT NULL DEFAULT 0, -- Minimum quantity before restocking is needed
   `last_updated` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
@@ -216,19 +218,19 @@ CREATE TABLE `stocks` (
 -- Dumping data for table `stocks`
 --
 
-INSERT INTO `stocks` (`id`, `product_id`, `branch_id`, `quantity`, `last_updated`) VALUES
-(1, 1, 1, 0, '2026-03-02 07:36:41'),
-(2, 1, 2, 15, '2026-03-01 12:22:01'),
-(3, 1, 3, 0, '2026-03-09 08:19:47'),
-(4, 2, 1, 23, '2026-03-01 12:22:01'),
-(5, 2, 2, 8, '2026-03-01 12:22:01'),
-(6, 2, 3, 0, '2026-03-01 12:22:01'),
-(7, 3, 1, 0, '2026-03-09 07:10:57'),
-(8, 3, 2, 0, '2026-03-01 12:22:01'),
-(9, 3, 3, 20, '2026-03-01 12:22:01'),
-(10, 4, 1, 3, '2026-03-01 12:22:01'),
-(11, 4, 2, 12, '2026-03-01 12:22:01'),
-(12, 4, 3, 7, '2026-03-01 12:22:01');
+INSERT INTO `stocks` (`id`, `product_id`, `branch_id`, `quantity`, `reorder_level`, `last_updated`) VALUES
+(1, 1, 1, 0, 0, '2026-03-02 07:36:41'),
+(2, 1, 2, 15, 0, '2026-03-01 12:22:01'),
+(3, 1, 3, 0, 0, '2026-03-09 08:19:47'),
+(4, 2, 1, 23, 0, '2026-03-01 12:22:01'),
+(5, 2, 2, 8, 0, '2026-03-01 12:22:01'),
+(6, 2, 3, 0, 0, '2026-03-01 12:22:01'),
+(7, 3, 1, 0, 0, '2026-03-09 07:10:57'),
+(8, 3, 2, 0, 0, '2026-03-01 12:22:01'),
+(9, 3, 3, 20, 0, '2026-03-01 12:22:01'),
+(10, 4, 1, 3, 0, '2026-03-01 12:22:01'),
+(11, 4, 2, 12, 0, '2026-03-01 12:22:01'),
+(12, 4, 3, 7, 0, '2026-03-01 12:22:01');
 
 -- --------------------------------------------------------
 
@@ -302,13 +304,15 @@ ALTER TABLE `product_branches`
 ALTER TABLE `sales`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `invoice_no` (`invoice_no`),
-  ADD KEY `branch_id` (`branch_id`);
+  ADD KEY `branch_id` (`branch_id`),
+  ADD KEY `submitted_by_staff` (`submitted_by_staff`); -- Index for FK lookup performance
 
 --
 -- Indexes for table `sale_items`
 --
 ALTER TABLE `sale_items`
   ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `unique_sale_product` (`sale_id`,`product_id`), -- Prevents same product appearing twice in one sale
   ADD KEY `sale_id` (`sale_id`),
   ADD KEY `product_id` (`product_id`);
 
@@ -325,6 +329,7 @@ ALTER TABLE `staff`
 --
 ALTER TABLE `stocks`
   ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `unique_product_branch` (`product_id`,`branch_id`), -- Prevents duplicate stock entries per product per branch
   ADD KEY `product_id` (`product_id`),
   ADD KEY `branch_id` (`branch_id`);
 
@@ -401,7 +406,8 @@ ALTER TABLE `users`
 -- Constraints for table `attendance`
 --
 ALTER TABLE `attendance`
-  ADD CONSTRAINT `attendance_ibfk_1` FOREIGN KEY (`staff_id`) REFERENCES `staff` (`id`) ON DELETE CASCADE;
+  ADD CONSTRAINT `attendance_ibfk_1` FOREIGN KEY (`staff_id`) REFERENCES `staff` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `attendance_ibfk_2` FOREIGN KEY (`recorded_by`) REFERENCES `users` (`id`) ON DELETE SET NULL; -- Nullify if the recording user is deleted
 
 --
 -- Constraints for table `products`
@@ -420,7 +426,8 @@ ALTER TABLE `product_branches`
 -- Constraints for table `sales`
 --
 ALTER TABLE `sales`
-  ADD CONSTRAINT `sales_ibfk_1` FOREIGN KEY (`branch_id`) REFERENCES `branches` (`id`) ON DELETE SET NULL;
+  ADD CONSTRAINT `sales_ibfk_1` FOREIGN KEY (`branch_id`) REFERENCES `branches` (`id`) ON DELETE SET NULL,
+  ADD CONSTRAINT `sales_ibfk_2` FOREIGN KEY (`submitted_by_staff`) REFERENCES `staff` (`id`) ON DELETE SET NULL; -- Nullify if the staff record is deleted
 
 --
 -- Constraints for table `sale_items`
