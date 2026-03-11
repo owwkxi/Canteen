@@ -77,14 +77,16 @@ include 'includes/header.php';
     <div class="col-lg-3">
         <div class="c-card p-4">
             <div class="section-title mb-3">Quick Actions</div>
-            <a href="invoice.php" class="quick-btn primary"><i class="bi bi-receipt me-2"></i>Record Product Sold</a>
+            <?php if (($_SESSION["role"] ?? "") !== "staff"): ?>
+                <a href="invoice.php" class="quick-btn primary"><i class="bi bi-receipt me-2"></i>Record Product Sold</a>
+            <?php endif; ?>
             <a href="add_product.php" class="quick-btn secondary">Add Product</a>
             <a href="stock.php" class="quick-btn secondary">Update Stock</a>
-            <a href="add_staff.php" class="quick-btn secondary">Add Staff</a>
+            <?php if (($_SESSION["role"] ?? "") !== "staff"): ?>
+                <a href="add_staff.php" class="quick-btn secondary">Add Staff</a>
+            <?php endif; ?>
         </div>
     </div>
-</div>
-
 <!-- Stock Overview -->
 <div class="row g-3 mt-2">
     <?php foreach ($stockOverview as $so): ?>
@@ -98,7 +100,7 @@ include 'includes/header.php';
             <?php foreach ($so['items'] as $item):
                 $qty = (int)$item['quantity'];
                 if ($qty === 0)    { $cls = 'status-out'; $label = 'out of stock'; $hint = 'order stocks now'; }
-                elseif ($qty <= 5) { $cls = 'status-low'; $label = 'low in stock'; $hint = 'refill stocks now'; }
+                elseif ($qty <= 15) { $cls = 'status-low'; $label = 'low in stock'; $hint = 'refill stocks now'; }
                 else               { $cls = 'status-high'; $label = 'high stock';  $hint = 'stocks are high'; }
             ?>
             <div class="stock-item">
