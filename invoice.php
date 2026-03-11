@@ -18,6 +18,7 @@ if (($_SESSION['role'] ?? '') === 'staff') {
     }
 }
 
+$page_title = 'Products Sold – Canteen Management';
 $db = getDB();
 // Ensure submitted_by_staff column exists
 $db->query("ALTER TABLE sales ADD COLUMN IF NOT EXISTS submitted_by_staff INT DEFAULT NULL");
@@ -288,7 +289,7 @@ include 'includes/header.php';
             </div>
             <div class="col-md-2">
                 <label class="form-label" style="font-size:.8rem;font-weight:600;color:#666;">Qty</label>
-                <input type="number" name="" class="form-control qty-input" placeholder="0" min="1" value="">
+                <input type="number" name="" class="form-control qty-input" placeholder="0" min="1" value="" style="border-color:inherit;">
             </div>
             <div class="col-md-2">
                 <label class="form-label" style="font-size:.8rem;font-weight:600;color:#666;">Unit Price</label>
@@ -325,9 +326,32 @@ function bindRowEvents(row) {
     function calc() {
         const opt   = sel.selectedOptions[0];
         const price = opt ? parseFloat(opt.dataset.price || 0) : 0;
-        const q     = parseInt(qty.value) || 0;
-        unit.value  = price ? '₱' + price.toFixed(2) : '—';
-        sub.value   = (q && price) ? '₱' + (price * q).toFixed(2) : '₱0.00';
+        const raw   = parseInt(qty.value);
+        let errMsg  = qty.parentElement.querySelector('.qty-error');
+
+        if (!isNaN(raw) && raw < 1) {
+            // Show inline error, mark field red, zero out subtotal
+            qty.style.borderColor  = '#C62828';
+            qty.style.background   = '#FFF5F5';
+            if (!errMsg) {
+                errMsg = document.createElement('div');
+                errMsg.className = 'qty-error';
+                errMsg.style.cssText = 'color:#C62828;font-size:.75rem;font-weight:600;margin-top:4px;';
+                qty.parentElement.appendChild(errMsg);
+            }
+            sub.value = '₱0.00';
+            updateTotal();
+            return;
+        }
+
+        // Clear error state
+        qty.style.borderColor = '';
+        qty.style.background  = '';
+        if (errMsg) errMsg.remove();
+
+        const q = isNaN(raw) ? 0 : raw;
+        unit.value = price ? '₱' + price.toFixed(2) : '—';
+        sub.value  = (q && price) ? '₱' + (price * q).toFixed(2) : '₱0.00';
         updateTotal();
     }
     sel.addEventListener('change', calc);
@@ -352,6 +376,14 @@ function updateTotal() {
 }
 
 document.getElementById('addRow').addEventListener('click', addRow);
+
+document.getElementById('salesForm').addEventListener('submit', function(e) {
+    if (document.querySelector('.qty-error')) {
+        e.preventDefault();
+        alert('Please fix invalid quantities before saving.');
+    }
+});
+
 addRow(); // start with one row
 </script>
 
