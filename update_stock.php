@@ -34,7 +34,7 @@ if (!$row) { header('Location: stock.php'); exit; }
 $page_title = 'Update Stock – Canteen Management';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $qty = (int)$_POST['quantity'];
+    $qty = max( 0, (int)$_POST['quantity'] );
     $db->query("UPDATE stocks SET quantity=$qty WHERE id=$id");
     $_SESSION['toast'] = ['msg' => 'Stock updated!', 'type' => 'success'];
     $back_bid = (int)($_POST['back'] ?? 0);

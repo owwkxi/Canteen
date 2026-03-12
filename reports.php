@@ -29,6 +29,15 @@ if (($_SESSION["role"] ?? "") === "staff") {
 $page_title = 'Daily Reports – Canteen Management';
 $db = getDB();
 
+// ── Delete sale ───────────────────────────────────────────
+if (!empty($_GET['delete'])) {
+    $inv = $db->real_escape_string($_GET['delete']);
+    $db->query("DELETE FROM sale_items WHERE sale_id = (SELECT id FROM sales WHERE invoice_no='$inv')");
+    $db->query("DELETE FROM sales WHERE invoice_no='$inv'");
+    $_SESSION['toast'] = ['msg' => "Sale <strong>$inv</strong> deleted.", 'type' => 'success'];
+    header("Location: reports.php"); exit;
+}
+
 $date_from = $_GET['date_from'] ?? date('Y-m-d');
 $date_to   = $_GET['date_to']   ?? date('Y-m-d');
 $branch_id = (int)($_GET['branch'] ?? 0);
@@ -72,7 +81,7 @@ $chart_dates = $db->query("SELECT DISTINCT sale_date FROM sales
 
 $chartLabels  = [];
 $chartDatasets = [];
-$colors = ['#7B1416','#C0392B','#E88080'];
+$colors = ['#5C7AEA','#FF8C42','#C77DFF'];
 
 foreach ($chart_dates as $d) {
     $chartLabels[] = date('M j', strtotime($d['sale_date']));
@@ -106,7 +115,10 @@ $pages      = max(1, ceil($total_rows / $per_page));
 $sales = $db->query("SELECT s.invoice_no, b.name AS branch_name,
     s.total_amount, s.sale_date, s.created_at,
     (SELECT COUNT(*) FROM sale_items WHERE sale_id=s.id) AS item_count,
-    (SELECT SUM(quantity) FROM sale_items WHERE sale_id=s.id) AS units
+    (SELECT SUM(quantity) FROM sale_items WHERE sale_id=s.id) AS units,
+    (SELECT GROUP_CONCAT(CONCAT(p.name, ' -', si.quantity) ORDER BY si.id SEPARATOR ', ')
+    FROM sale_items si JOIN products p ON p.id = si.product_id
+    WHERE si.sale_id = s.id) AS item_name
     FROM sales s JOIN branches b ON b.id=s.branch_id
     $where ORDER BY s.sale_date DESC, s.created_at DESC
     LIMIT $per_page OFFSET $offset")->fetch_all(MYSQLI_ASSOC);
@@ -273,18 +285,19 @@ include 'includes/header.php';
     <table class="c-table">
         <thead>
             <tr>
-                <th>Sale No</th>
+                <th>Invoice No</th>
                 <th>Branch</th>
                 <th>Date</th>
-                <th>Items</th>
+                <th>Item Name</th>
                 <th>Units</th>
                 <th>Amount</th>
                 <th>Created</th>
+                <th>Action</th>
             </tr>
         </thead>
         <tbody>
             <?php if (empty($sales)): ?>
-            <tr><td colspan="7" class="text-center py-5 text-muted">No sales data for this period.</td></tr>
+            <tr><td colspan="8" class="text-center py-5 text-muted">No sales data for this period.</td></tr>
             <?php else: foreach ($sales as $sale): ?>
             <tr>
                 <td style="font-weight:600;color:var(--maroon);">
@@ -292,10 +305,17 @@ include 'includes/header.php';
                 </td>
                 <td><?= htmlspecialchars($sale['branch_name']) ?></td>
                 <td><?= date('M j, Y', strtotime($sale['sale_date'])) ?></td>
-                <td style="color:#888;"><?= $sale['item_count'] ?> product<?= $sale['item_count']!=1?'s':'' ?></td>
+                <td style="color:#555; font-size:.82rem; max-width:260px; white-space:normal;"> <?= htmlspecialchars($sale['item_name'] ?? '—') ?> </td>
                 <td style="color:#888;"><?= number_format($sale['units']) ?> pcs</td>
                 <td style="font-weight:700;">₱<?= number_format($sale['total_amount'], 2) ?></td>
                 <td style="color:#aaa;font-size:.82rem;"><?= date('g:iA', strtotime($sale['created_at'])) ?></td>
+                <td>
+                    <button type="button" class="btn btn-sm"
+                            style="background:#FFCDD2;color:#C62828;border-radius:6px;border:none;"
+                            onclick="confirmDelete('<?= addslashes(htmlspecialchars($sale['invoice_no'])) ?>')">
+                        Delete
+                    </button>
+                </td>
             </tr>
             <?php endforeach; endif; ?>
         </tbody>
@@ -346,5 +366,42 @@ new Chart(document.getElementById('revenueChart'), {
 });
 </script>
 <?php endif; ?>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header border-0 pb-3">
+                <h5 class="modal-title" style="color:#FFFFFF;">
+                    <i class="bi bi-trash3 me-2"></i>Delete Sale
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size:.9rem;color:#555;">Are you sure you want to delete:</p>
+                <p id="deleteLabel" style="font-weight:700;color:var(--maroon);font-size:.95rem;"></p>
+                <p style="font-size:.8rem;color:#e53935;background:#FFF3E0;border-radius:6px;padding:8px 10px;margin-bottom:0;">
+                    <i class="bi bi-exclamation-triangle me-1"></i>
+                    This will also remove all items linked to this sale.
+                </p>
+            </div>
+            <div class="modal-footer border-0 pt-0">
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <a id="deleteConfirmBtn" href="#" class="btn btn-sm"
+                   style="background:#C62828;color:#fff;border-radius:6px;border:none;">
+                    Yes, Delete
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function confirmDelete(invoice_no) {
+    document.getElementById('deleteLabel').textContent = invoice_no;
+    document.getElementById('deleteConfirmBtn').href = '?<?= $qs ?>&delete=' + encodeURIComponent(invoice_no);
+    new bootstrap.Modal(document.getElementById('deleteModal')).show();
+}
+</script>
 
 <?php include 'includes/footer.php'; ?>

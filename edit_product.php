@@ -51,6 +51,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $upd->execute();
 
     $db->query("DELETE FROM product_branches WHERE product_id=$id");
+    $db->query("DELETE FROM stocks WHERE product_id=$id AND quantity=0 AND branch_id NOT IN (" . implode(',', array_map('intval', $bids ?: [0])) . ")");
     foreach ($bids as $bid) {
         $bid = (int)$bid;
         $db->query("INSERT IGNORE INTO product_branches (product_id, branch_id) VALUES ($id, $bid)");

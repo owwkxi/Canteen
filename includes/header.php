@@ -365,10 +365,20 @@ if (!in_array($current_page, $allowed)) {
         <!-- Daily Reports — super_admin only -->
         <?php if (hasRole('super_admin')): ?>
         <li class="nav-item">
-            <a href="reports.php" class="nav-link <?= $current_page === 'reports' ? 'active' : '' ?>">
+            <a href="reports.php" class="nav-link <?= in_array($current_page, ['reports','invoice']) ? 'active' : '' ?>">
                 <i class="bi bi-file-earmark-text"></i> Daily Reports
             </a>
         </li>
+        <?php if (in_array($current_page, ['reports','invoice'])): ?>
+        <ul class="sub-nav">
+            <li><a href="reports.php" class="nav-link <?= $current_page === 'reports' ? 'active' : '' ?>">
+                <i class="bi bi-caret-right-fill"></i> Reports
+            </a></li>
+            <li><a href="invoice.php" class="nav-link <?= $current_page === 'invoice' ? 'active' : '' ?>">
+                <i class="bi bi-caret-right-fill"></i> Invoice
+            </a></li>
+        </ul>
+        <?php endif; ?>
         <?php endif; ?>
 
         <!-- System User — super_admin only -->
@@ -390,3 +400,4 @@ if (!in_array($current_page, $allowed)) {
 
 <!-- MAIN CONTENT -->
 <div class="main-content">
+

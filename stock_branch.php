@@ -112,7 +112,7 @@ include 'includes/header.php';
             <?php foreach ($stocks as $s):
                 $qty = (int)$s['quantity'];
                 if ($qty === 0)    { $cls = 'status-out';  $label = 'out of stock'; }
-                elseif ($qty <= 5) { $cls = 'status-low';  $label = 'low in stock'; }
+                elseif ($qty <= 15) { $cls = 'status-low';  $label = 'low in stock'; }
                 else               { $cls = 'status-high'; $label = 'high stock'; }
             ?>
             <tr>
@@ -122,7 +122,7 @@ include 'includes/header.php';
                 <td><span class="status-pill <?= $cls ?>"><?= $label ?></span></td>
                 <td><?= date('F j, Y g:iA', strtotime($s['last_updated'])) ?></td>
                 <td>
-                    <a href="update_stock.php?id=<?= $s['id'] ?>&back=<?= $bid ?>" class="btn-edit btn btn-sm">Update</a>
+                    <a href="update_stock.php?id=<?= $s['id'] ?>&back=<?= $bid ?>" class="btn btn-edit2 btn-sm">Update</a>
                 </td>
             </tr>
             <?php endforeach; ?>
