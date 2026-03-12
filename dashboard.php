@@ -77,13 +77,11 @@ include 'includes/header.php';
     <div class="col-lg-3">
         <div class="c-card p-4">
             <div class="section-title mb-3">Quick Actions</div>
-            <?php if (($_SESSION["role"] ?? "") !== "staff"): ?>
-                <a href="invoice.php" class="quick-btn primary"><i class="bi bi-receipt me-2"></i>Record Product Sold</a>
-            <?php endif; ?>
+            <a href="invoice.php" class="quick-btn primary"><i class="bi bi-receipt me-2"></i>Record Product Sold</a>
             <a href="add_product.php" class="quick-btn secondary">Add Product</a>
             <a href="stock.php" class="quick-btn secondary">Update Stock</a>
-            <?php if (($_SESSION["role"] ?? "") !== "staff"): ?>
-                <a href="add_staff.php" class="quick-btn secondary">Add Staff</a>
+            <?php if (hasRole('admin')): ?>
+            <a href="add_staff.php" class="quick-btn secondary">Add Staff</a>
             <?php endif; ?>
         </div>
     </div>
