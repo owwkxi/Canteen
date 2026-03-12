@@ -122,7 +122,7 @@ include 'includes/header.php';
                 <td><span class="status-pill <?= $cls ?>"><?= $label ?></span></td>
                 <td><?= date('F j, Y g:iA', strtotime($s['last_updated'])) ?></td>
                 <td>
-                    <a href="update_stock.php?id=<?= $s['id'] ?>&back=<?= $bid ?>" class="btn-edit btn btn-sm">Update</a>
+                    <a href="update_stock.php?id=<?= $s['id'] ?>&back=<?= $bid ?>" class="btn btn-edit2 btn-sm">Update</a>
                 </td>
             </tr>
             <?php endforeach; ?>
