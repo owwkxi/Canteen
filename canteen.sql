@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: localhost
--- Generation Time: Mar 11, 2026 at 12:26 PM
+-- Generation Time: Mar 12, 2026 at 10:11 AM
 -- Server version: 10.4.28-MariaDB
 -- PHP Version: 8.2.4
 
@@ -18,8 +18,60 @@ SET time_zone = "+00:00";
 /*!40101 SET NAMES utf8mb4 */;
 
 --
--- Database: `canteen`
+-- Database: `canteen_db`
 --
+
+DELIMITER $$
+--
+-- Procedures
+--
+CREATE DEFINER=`root`@`localhost` PROCEDURE `process_secure_sale` (IN `p_invoice` VARCHAR(50), IN `p_branch` INT, IN `p_product` INT, IN `p_quantity` INT, IN `p_price` DECIMAL(10,2))   BEGIN
+    -- 1. ROLLBACK CAPABILITY: Declare an exit handler for errors
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION 
+    BEGIN
+        -- If any error occurs, rollback the entire transaction
+        ROLLBACK;
+        -- Log the failure
+        INSERT INTO system_logs(action, description) 
+        VALUES ('SALE ERROR', CONCAT('Transaction rolled back for invoice: ', p_invoice));
+    END;
+
+    -- 2. CONCURRENCY CONTROL: Start the explicit transaction
+    START TRANSACTION;
+
+    -- 3. LOCKING MECHANISM: Lock the specific stock row so no one else can modify it while we read/update
+    SELECT quantity INTO @current_stock 
+    FROM stocks 
+    WHERE product_id = p_product AND branch_id = p_branch 
+    FOR UPDATE; -- <--- This is the explicit lock
+
+    -- Check if we have enough stock before proceeding
+    IF @current_stock >= p_quantity THEN
+        
+        -- Insert the main sale record
+        INSERT INTO sales(invoice_no, branch_id, sale_date)
+        VALUES(p_invoice, p_branch, CURDATE());
+        
+        -- Get the ID of the sale we just inserted
+        SET @new_sale_id = LAST_INSERT_ID();
+
+        -- Insert the sale item (Your triggers will automatically handle the stock deduction and total update here!)
+        INSERT INTO sale_items(sale_id, product_id, quantity, unit_price)
+        VALUES(@new_sale_id, p_product, p_quantity, p_price);
+
+        -- Commit the transaction to finalize all changes safely
+        COMMIT;
+        
+    ELSE
+        -- Not enough stock, rollback and log it
+        ROLLBACK;
+        INSERT INTO system_logs(action, description) 
+        VALUES ('INSUFFICIENT STOCK', CONCAT('Failed to process invoice: ', p_invoice));
+    END IF;
+
+END$$
+
+DELIMITER ;
 
 -- --------------------------------------------------------
 
@@ -45,7 +97,9 @@ CREATE TABLE `attendance` (
 
 INSERT INTO `attendance` (`id`, `staff_id`, `date`, `time_in`, `time_out`, `status`, `notes`, `recorded_by`, `created_at`) VALUES
 (16, 8, '2026-03-11', NULL, NULL, 'Present', '', 12, '2026-03-11 02:30:52'),
-(25, 7, '2026-03-11', NULL, NULL, 'Absent', '', 12, '2026-03-11 03:11:19');
+(25, 7, '2026-03-11', NULL, NULL, 'Absent', '', 12, '2026-03-11 03:11:19'),
+(43, 8, '2026-03-12', NULL, NULL, 'Present', '', 17, '2026-03-12 08:37:14'),
+(44, 7, '2026-03-12', NULL, NULL, 'Present', '', 17, '2026-03-12 08:37:14');
 
 -- --------------------------------------------------------
 
@@ -120,7 +174,10 @@ INSERT INTO `products` (`id`, `product_id`, `name`, `category_id`, `cost_price`,
 (3, 'B01', 'Mineral Water', 2, 10.00, 20.00, '2026-03-01 12:22:01'),
 (4, 'B02', 'Coke 500ml', 2, 22.00, 35.00, '2026-03-01 12:22:01'),
 (5, 'C01', 'Pancit Canton', 3, 12.00, 25.00, '2026-03-01 12:22:01'),
-(6, 'D01', 'Banana Cue', 4, 8.00, 15.00, '2026-03-01 12:22:01');
+(6, 'D01', 'Banana Cue', 4, 8.00, 15.00, '2026-03-01 12:22:01'),
+(8, 'C02', 'Riceball', 3, 15.00, 25.00, '2026-03-11 20:32:45'),
+(9, 'A03', 'Wafello', 1, 12.00, 15.00, '2026-03-12 08:35:36'),
+(10, 'C03', 'Chicken Mami', 3, 15.00, 25.00, '2026-03-12 08:36:48');
 
 -- --------------------------------------------------------
 
@@ -140,7 +197,23 @@ CREATE TABLE `product_branches` (
 INSERT INTO `product_branches` (`product_id`, `branch_id`) VALUES
 (1, 1),
 (1, 2),
-(1, 3);
+(1, 3),
+(2, 1),
+(2, 2),
+(3, 1),
+(3, 2),
+(3, 3),
+(4, 1),
+(4, 2),
+(4, 3),
+(5, 2),
+(5, 3),
+(6, 2),
+(8, 3),
+(9, 1),
+(9, 3),
+(10, 1),
+(10, 3);
 
 -- --------------------------------------------------------
 
@@ -167,7 +240,25 @@ INSERT INTO `sales` (`id`, `invoice_no`, `branch_id`, `total_amount`, `sale_date
 (24, 'INV-69AE82A3DCAD9', 3, 5175.00, '2026-03-09', '2026-03-09 08:19:47', NULL),
 (25, 'INV-69AE82C221786', 1, 3510.00, '2026-03-09', '2026-03-09 08:20:18', NULL),
 (27, 'INV-69B0DCBAB3FF9', 3, 40.00, '2026-03-11', '2026-03-11 03:08:42', NULL),
-(29, 'INV-69B14FF5A68DB', 1, 36.00, '2026-03-11', '2026-03-11 11:20:21', NULL);
+(29, 'INV-69B14FF5A68DB', 1, 36.00, '2026-03-11', '2026-03-11 11:20:21', NULL),
+(30, 'INV-69B1D0C9E3C04', 1, 200.00, '2026-03-11', '2026-03-11 20:30:01', NULL),
+(32, 'INV-69B1D1F115676', 3, 250.00, '2026-03-11', '2026-03-11 20:34:57', 8),
+(34, 'INV-69B27D4A63253', 2, 700.00, '2026-03-12', '2026-03-12 08:46:02', NULL),
+(35, 'INV-69B27DE36BA1A', 1, 325.00, '2026-03-12', '2026-03-12 08:48:35', NULL);
+
+--
+-- Triggers `sales`
+--
+DELIMITER $$
+CREATE TRIGGER `log_new_sale` AFTER INSERT ON `sales` FOR EACH ROW BEGIN
+    INSERT INTO system_logs(action,description)
+    VALUES(
+        'NEW SALE',
+        CONCAT('Invoice ',NEW.invoice_no,' created for branch ',NEW.branch_id)
+    );
+END
+$$
+DELIMITER ;
 
 -- --------------------------------------------------------
 
@@ -192,7 +283,36 @@ INSERT INTO `sale_items` (`id`, `sale_id`, `product_id`, `quantity`, `unit_price
 (3, 24, 1, 345, 15.00),
 (4, 25, 6, 234, 15.00),
 (6, 27, 3, 2, 20.00),
-(9, 29, 2, 3, 12.00);
+(9, 29, 2, 3, 12.00),
+(10, 30, 3, 10, 20.00),
+(12, 32, 8, 10, 25.00),
+(13, 34, 3, 20, 20.00),
+(14, 34, 6, 10, 15.00),
+(15, 34, 1, 10, 15.00),
+(16, 35, 10, 10, 25.00),
+(17, 35, 1, 5, 15.00);
+
+--
+-- Triggers `sale_items`
+--
+DELIMITER $$
+CREATE TRIGGER `deduct_stock_after_sale` AFTER INSERT ON `sale_items` FOR EACH ROW BEGIN
+    UPDATE stocks s
+    JOIN sales sa ON sa.id = NEW.sale_id
+    SET s.quantity = s.quantity - NEW.quantity
+    WHERE s.product_id = NEW.product_id
+    AND s.branch_id = sa.branch_id;
+END
+$$
+DELIMITER ;
+DELIMITER $$
+CREATE TRIGGER `update_sales_total` AFTER INSERT ON `sale_items` FOR EACH ROW BEGIN
+    UPDATE sales
+    SET total_amount = total_amount + (NEW.quantity * NEW.unit_price)
+    WHERE id = NEW.sale_id;
+END
+$$
+DELIMITER ;
 
 -- --------------------------------------------------------
 
@@ -240,18 +360,48 @@ CREATE TABLE `stocks` (
 --
 
 INSERT INTO `stocks` (`id`, `product_id`, `branch_id`, `quantity`, `reorder_level`, `last_updated`) VALUES
-(1, 1, 1, 0, 0, '2026-03-02 07:36:41'),
-(2, 1, 2, 15, 0, '2026-03-01 12:22:01'),
-(3, 1, 3, 0, 0, '2026-03-09 08:19:47'),
+(1, 1, 1, 13, 0, '2026-03-12 08:48:35'),
+(2, 1, 2, 5, 0, '2026-03-12 08:46:02'),
+(3, 1, 3, 10, 0, '2026-03-12 08:30:13'),
 (4, 2, 1, 17, 0, '2026-03-11 11:20:21'),
-(5, 2, 2, 8, 0, '2026-03-01 12:22:01'),
-(6, 2, 3, 0, 0, '2026-03-01 12:22:01'),
+(5, 2, 2, 0, 0, '2026-03-12 08:31:01'),
 (7, 3, 1, 0, 0, '2026-03-09 07:10:57'),
-(8, 3, 2, 0, 0, '2026-03-01 12:22:01'),
+(8, 3, 2, 30, 0, '2026-03-12 08:46:02'),
 (9, 3, 3, 18, 0, '2026-03-11 03:08:42'),
-(10, 4, 1, 3, 0, '2026-03-01 12:22:01'),
 (11, 4, 2, 12, 0, '2026-03-01 12:22:01'),
-(12, 4, 3, 7, 0, '2026-03-01 12:22:01');
+(19, 8, 3, 20, 0, '2026-03-12 08:30:08'),
+(31, 6, 2, 20, 0, '2026-03-12 08:46:02'),
+(32, 4, 1, 3, 0, '2026-03-12 08:31:10'),
+(34, 4, 3, 50, 0, '2026-03-12 08:30:02'),
+(35, 9, 1, 0, 0, '2026-03-12 08:35:36'),
+(36, 9, 3, 30, 0, '2026-03-12 08:38:40'),
+(37, 5, 3, 100, 0, '2026-03-12 08:38:34'),
+(38, 10, 1, 20, 0, '2026-03-12 08:48:35'),
+(39, 10, 3, 30, 0, '2026-03-12 08:38:30'),
+(40, 5, 2, 0, 0, '2026-03-12 08:57:27');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `system_logs`
+--
+
+CREATE TABLE `system_logs` (
+  `id` int(11) NOT NULL,
+  `action` varchar(100) DEFAULT NULL,
+  `description` text DEFAULT NULL,
+  `user_id` int(11) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `system_logs`
+--
+
+INSERT INTO `system_logs` (`id`, `action`, `description`, `user_id`, `created_at`) VALUES
+(2, 'SALE FAILED', 'Invoice INV-69B27D20A3E59 failed: Insufficient stock for Mineral Water. (Available quantity: 50)', NULL, '2026-03-12 08:45:20'),
+(3, 'NEW SALE', 'Invoice INV-69B27D4A63253 created for branch 2', NULL, '2026-03-12 08:46:02'),
+(4, 'NEW SALE', 'Invoice INV-69B27DE36BA1A created for branch 1', NULL, '2026-03-12 08:48:35');
 
 -- --------------------------------------------------------
 
@@ -357,6 +507,12 @@ ALTER TABLE `stocks`
   ADD KEY `branch_id` (`branch_id`);
 
 --
+-- Indexes for table `system_logs`
+--
+ALTER TABLE `system_logs`
+  ADD PRIMARY KEY (`id`);
+
+--
 -- Indexes for table `users`
 --
 ALTER TABLE `users`
@@ -371,7 +527,7 @@ ALTER TABLE `users`
 -- AUTO_INCREMENT for table `attendance`
 --
 ALTER TABLE `attendance`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=43;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=45;
 
 --
 -- AUTO_INCREMENT for table `branches`
@@ -389,19 +545,19 @@ ALTER TABLE `categories`
 -- AUTO_INCREMENT for table `products`
 --
 ALTER TABLE `products`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=8;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=11;
 
 --
 -- AUTO_INCREMENT for table `sales`
 --
 ALTER TABLE `sales`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=30;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=36;
 
 --
 -- AUTO_INCREMENT for table `sale_items`
 --
 ALTER TABLE `sale_items`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=10;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=18;
 
 --
 -- AUTO_INCREMENT for table `staff`
@@ -413,7 +569,13 @@ ALTER TABLE `staff`
 -- AUTO_INCREMENT for table `stocks`
 --
 ALTER TABLE `stocks`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=19;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=43;
+
+--
+-- AUTO_INCREMENT for table `system_logs`
+--
+ALTER TABLE `system_logs`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
 
 --
 -- AUTO_INCREMENT for table `users`
