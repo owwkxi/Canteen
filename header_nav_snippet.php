@@ -12,6 +12,9 @@
  */
 
 // Load access helpers if not already loaded
+
+require_once __DIR__ . '/config.php';
+
 if (!function_exists('canAccessCashier')) {
     require_once __DIR__ . '/access.php';
 }
@@ -33,22 +36,22 @@ $current_file = basename($_SERVER['PHP_SELF']);
     <i class="bi bi-receipt"></i> Product Sold
 </a>
 
-<?php if (canAccessCashier()): ?>
-<!-- Products – cashier + admin only -->
+<?php if (canAccessCashier() || hasRole('super_admin')): ?>
+<!-- Products – cashier + admin + super_admin only -->
 <a href="products.php"
    class="nav-link <?= $current_file === 'products.php' ? 'active' : '' ?>">
     <i class="bi bi-box-seam"></i> Products
 </a>
 
-<!-- Stock – cashier + admin only -->
+<!-- Stock – cashier + admin + super_admin only -->
 <a href="stock.php"
    class="nav-link <?= in_array($current_file, ['stock.php','stock_branch.php','update_stock.php']) ? 'active' : '' ?>">
     <i class="bi bi-archive"></i> Stock
 </a>
 
-<!-- Reports – cashier + admin only -->
+<!-- Reports group (invoice + reports treated as one nav item) -->
 <a href="reports.php"
-   class="nav-link <?= $current_file === 'reports.php' ? 'active' : '' ?>">
+   class="nav-link <?= in_array($current_file, ['reports.php', 'invoice.php']) ? 'active' : '' ?>">
     <i class="bi bi-bar-chart-line"></i> Reports
 </a>
 <?php endif; ?>
