@@ -184,8 +184,8 @@ include 'includes/header.php';
 <div class="modal fade" id="deleteModal" tabindex="-1">
     <div class="modal-dialog modal-sm">
         <div class="modal-content">
-            <div class="modal-header border-0 pb-0">
-                <h5 class="modal-title" style="color:#C62828;">
+            <div class="modal-header border-0 pb-3">
+                <h5 class="modal-title" style="color:#FFFFFF;">
                     <i class="bi bi-trash3 me-2"></i>Delete Product
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
