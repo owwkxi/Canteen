@@ -155,8 +155,8 @@ include 'includes/header.php';
 <div class="modal fade" id="deleteStaffModal" tabindex="-1">
     <div class="modal-dialog modal-sm">
         <div class="modal-content">
-            <div class="modal-header border-0 pb-0">
-                <h5 class="modal-title" style="color:#C62828;">
+            <div class="modal-header border-0 pb-3">
+                <h5 class="modal-title" style="color:#FFFFFF;">
                     <i class="bi bi-person-x me-2"></i>Delete Staff
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
