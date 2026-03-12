@@ -1,8 +1,15 @@
 <?php
 require_once 'includes/config.php';
+
+// Force PHP timezone to local time
+date_default_timezone_set('Asia/Manila');
+
 requireLogin();
 $page_title = 'Staff Attendance – Canteen Management';
 $db = getDB();
+
+// Synchronize MySQL timezone to match PHP for the created_at timestamp
+$db->query("SET time_zone = '+08:00'");
 
 // Ensure table exists
 $db->query("CREATE TABLE IF NOT EXISTS attendance (
@@ -219,7 +226,6 @@ include 'includes/header.php';
 }
 </style>
 
-<!-- ── Page Header ─────────────────────────────────────── -->
 <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:16px;margin-bottom:24px;">
     <div>
         <div class="page-title">Staff Attendance</div>
@@ -258,9 +264,6 @@ include 'includes/header.php';
 </div>
 
 <?php if (!$is_admin): ?>
-<!-- ════════════════════════════════════════════════════════
-     STAFF SELF-SERVICE VIEW
-═════════════════════════════════════════════════════════ -->
 <?php if (!$my_staff): ?>
 <div class="c-card p-5 text-center text-muted">
     <i class="bi bi-person-x" style="font-size:2rem;display:block;margin-bottom:12px;"></i>
@@ -291,11 +294,9 @@ include 'includes/header.php';
         <?= htmlspecialchars($my_staff['sid']) ?> &bull; <?= htmlspecialchars($my_staff['job_role']) ?>
     </div>
 
-    <!-- Live clock -->
     <div class="self-time-display" id="liveClock">--:--:--</div>
     <div class="self-date"><?= date('l, F j, Y') ?></div>
 
-    <!-- Current status -->
     <div style="text-align:center;margin-bottom:20px;">
         <span class="att-badge <?= $badge_cls ?>" style="font-size:.82rem;padding:5px 16px;">
             <?= $ast ?: 'Not yet marked' ?>
@@ -318,7 +319,6 @@ include 'includes/header.php';
         <?php endif; ?>
     </div>
 
-    <!-- Check-in / Check-out buttons -->
     <div style="display:flex;flex-direction:column;gap:10px;">
         <form method="POST">
             <input type="hidden" name="action" value="self_checkin">
@@ -349,21 +349,25 @@ include 'includes/header.php';
 // Live clock
 function tick() {
     const now = new Date();
-    const h = String(now.getHours()).padStart(2,'0');
+    let hours = now.getHours();
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    
+    // Convert 24-hour time to 12-hour time
+    hours = hours % 12;
+    hours = hours ? hours : 12; // the hour '0' should be '12'
+    
+    const h = String(hours).padStart(2,'0');
     const m = String(now.getMinutes()).padStart(2,'0');
     const s = String(now.getSeconds()).padStart(2,'0');
-    document.getElementById('liveClock').textContent = h + ':' + m + ':' + s;
+    
+    // Display with AM/PM
+    document.getElementById('liveClock').textContent = `${h}:${m}:${s} ${ampm}`;
 }
 tick(); setInterval(tick, 1000);
 </script>
 <?php endif; ?>
 
 <?php else: ?>
-<!-- ════════════════════════════════════════════════════════
-     ADMIN / SUPER ADMIN VIEW — CARD GRID
-═════════════════════════════════════════════════════════ -->
-
-<!-- Summary pills -->
 <?php if (count($staff_list)): ?>
 <div class="att-summary">
     <div class="att-sum-pill pill-present"><span class="dot dot-present"></span><?= $count_present ?> Present</div>
@@ -435,7 +439,6 @@ tick(); setInterval(tick, 1000);
 </div>
 <?php endif; ?>
 
-<!-- Detail / Edit Modal -->
 <div class="modal fade" id="detailModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
