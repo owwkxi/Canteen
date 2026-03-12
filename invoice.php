@@ -1,16 +1,20 @@
 <?php
 require_once 'includes/config.php';
 requireLogin();
+
 // ── Access guard: Cashier staff + admin only ─────────────────────────────
 if (($_SESSION['role'] ?? '') === 'staff') {
     // Fresh DB lookup every time — never rely on session for job_role here
     $db_g   = getDB();
     $uid_g  = (int)$_SESSION['user_id'];
+    
     // Step 1: get the username of the logged-in user
     $urow_g = $db_g->query("SELECT username FROM users WHERE id=$uid_g LIMIT 1")->fetch_assoc();
+    
     // Step 2: match staff_id using LOWER() on both sides (sf001 matches SF001)
     $un_g   = $db_g->real_escape_string(strtolower($urow_g['username'] ?? ''));
     $sr_g   = $db_g->query("SELECT role FROM staff WHERE LOWER(staff_id)='$un_g' LIMIT 1")->fetch_assoc();
+    
     // Step 3: also update session so other pages benefit
     $_SESSION['job_role'] = $sr_g['role'] ?? null;
     if (($_SESSION['job_role'] ?? '') !== 'Cashier') {
@@ -20,6 +24,7 @@ if (($_SESSION['role'] ?? '') === 'staff') {
 
 $page_title = 'Products Sold – Canteen Management';
 $db = getDB();
+
 // Ensure submitted_by_staff column exists
 $db->query("ALTER TABLE sales ADD COLUMN IF NOT EXISTS submitted_by_staff INT DEFAULT NULL");
 
@@ -58,50 +63,85 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $submitted_by = (int)$current_staff['id'];
     }
 
-    $total = 0;
     $valid = [];
     foreach ($items as $item) {
         if (!empty($item['product_id']) && (int)$item['qty'] > 0) {
             $pid = (int)$item['product_id'];
             $qty = (int)$item['qty'];
-            $pr  = $db->query("SELECT selling_price FROM products WHERE id=$pid")->fetch_assoc();
+            $pr  = $db->query("SELECT name, selling_price FROM products WHERE id=$pid")->fetch_assoc();
             if ($pr) {
-                $sub    = $pr['selling_price'] * $qty;
-                $total += $sub;
-                $valid[] = ['pid' => $pid, 'qty' => $qty, 'price' => $pr['selling_price']];
+                $valid[] = ['pid' => $pid, 'qty' => $qty, 'price' => $pr['selling_price'], 'name' => $pr['name']];
             }
         }
     }
 
-    if ($total > 0 && $valid) {
-        if ($submitted_by) {
-            $stmt = $db->prepare("INSERT INTO sales (invoice_no, branch_id, total_amount, sale_date, submitted_by_staff)
-                                   VALUES (?,?,?,?,?)");
-            $stmt->bind_param("sidsi", $invoice, $branch_id, $total, $date, $submitted_by);
-        } else {
-            $stmt = $db->prepare("INSERT INTO sales (invoice_no, branch_id, total_amount, sale_date) VALUES (?,?,?,?)");
-            $stmt->bind_param("sids", $invoice, $branch_id, $total, $date);
-        }
-        $stmt->execute();
-        $sale_id = $db->insert_id;
+    if ($valid) {
+        // ==============================================================================
+        // CORE REQUIREMENT: Concurrency Control, Rollback & Locking applied here
+        // ==============================================================================
+        
+        // ==============================================================================
+        // CORE REQUIREMENT: Concurrency Control, Isolation, Locking & Deadlock Handling
+        // ==============================================================================
+        
+        // 1. ISOLATION: Explicitly set the isolation level for evidence
+        $db->query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ");
+        $db->begin_transaction(); // Start explicit transaction
 
-        foreach ($valid as $v) {
-            $db->query("INSERT INTO sale_items (sale_id, product_id, quantity, unit_price)
-                        VALUES ($sale_id, {$v['pid']}, {$v['qty']}, {$v['price']})");
-            $db->query("UPDATE stocks SET quantity = GREATEST(0, quantity - {$v['qty']})
-                        WHERE product_id={$v['pid']} AND branch_id=$branch_id");
-        }
+        try {
+            if ($submitted_by) {
+                $stmt = $db->prepare("INSERT INTO sales (invoice_no, branch_id, total_amount, sale_date, submitted_by_staff) VALUES (?, ?, 0.00, ?, ?)");
+                $stmt->bind_param("sisi", $invoice, $branch_id, $date, $submitted_by);
+            } else {
+                $stmt = $db->prepare("INSERT INTO sales (invoice_no, branch_id, total_amount, sale_date) VALUES (?, ?, 0.00, ?)");
+                $stmt->bind_param("sis", $invoice, $branch_id, $date);
+            }
+            $stmt->execute();
+            $sale_id = $db->insert_id;
 
-        $staff_name = '';
-        if ($submitted_by) {
-            $srow = $db->query("SELECT full_name FROM staff WHERE id=$submitted_by")->fetch_assoc();
-            $staff_name = $srow ? " · Recorded by <strong>{$srow['full_name']}</strong>" : '';
+            foreach ($valid as $v) {
+                // 2. LOCKING: Row-level lock using FOR UPDATE
+                $stock_query = $db->query("SELECT quantity FROM stocks WHERE product_id={$v['pid']} AND branch_id=$branch_id FOR UPDATE");
+                $stock_row = $stock_query->fetch_assoc();
+
+                if (!$stock_row || $stock_row['quantity'] < $v['qty']) {
+                    throw new Exception("Insufficient stock for {$v['name']}. (Available quantity: " . ($stock_row['quantity'] ?? 0) . ")");
+                }
+
+                $db->query("INSERT INTO sale_items (sale_id, product_id, quantity, unit_price)
+                            VALUES ($sale_id, {$v['pid']}, {$v['qty']}, {$v['price']})");
+            }
+
+            $db->commit();
+
+            $staff_name = '';
+            if ($submitted_by) {
+                $srow = $db->query("SELECT full_name FROM staff WHERE id=$submitted_by")->fetch_assoc();
+                $staff_name = $srow ? " · Recorded by <strong>{$srow['full_name']}</strong>" : '';
+            }
+            $_SESSION['toast'] = [
+                'msg'  => "Sales recorded successfully!" . $staff_name,
+                'type' => 'success'
+            ];
+            header('Location: reports.php'); exit;
+
+        } catch (Exception $e) {
+            $db->rollback();
+            
+            // 3. DEADLOCK HANDLING: Check for specific MySQL lock/deadlock error codes
+            $errCode = $db->errno;
+            if ($errCode == 1213 || $errCode == 1205) {
+                // 1213 is Deadlock, 1205 is Lock Wait Timeout
+                $db->query("INSERT INTO system_logs (action, description) VALUES ('DEADLOCK RESOLVED', 'Invoice $invoice encountered a deadlock and was safely rolled back.')");
+                $error = "The system is currently busy processing another transaction for these items. Please try saving again.";
+            } else {
+                // Handle standard errors (like insufficient stock)
+                $error_message = $db->real_escape_string($e->getMessage());
+                $db->query("INSERT INTO system_logs (action, description) VALUES ('SALE FAILED', 'Invoice $invoice failed: $error_message')");
+                $error = "Transaction failed: " . $e->getMessage();
+            }
         }
-        $_SESSION['toast'] = [
-            'msg'  => "Sales recorded! Total: ₱" . number_format($total, 2) . $staff_name,
-            'type' => 'success'
-        ];
-        header('Location: reports.php'); exit;
+        
     } else {
         $error = 'Please add at least one valid item with quantity.';
     }
@@ -152,7 +192,6 @@ include 'includes/header.php';
 .grand-total-box .amount { font-size:1.8rem; font-weight:800; }
 </style>
 
-<!-- Page header -->
 <div class="d-flex align-items-start justify-content-between mb-4 flex-wrap gap-3">
     <div>
         <div class="page-title">Product Sold</div>
@@ -166,7 +205,6 @@ include 'includes/header.php';
     </a>
 </div>
 
-<!-- Today's quick stats -->
 <div class="row g-3 mb-4">
     <div class="col-4">
         <div class="today-stat">
@@ -188,7 +226,6 @@ include 'includes/header.php';
     </div>
 </div>
 
-<!-- Sales entry form -->
 <div class="c-card p-4">
     <div class="section-title mb-3">New Sale Entry</div>
 
@@ -199,11 +236,9 @@ include 'includes/header.php';
     <form method="POST" id="salesForm">
 
         <?php if ($is_staff && $current_staff): ?>
-        <!-- Staff user: auto-inject their ID silently -->
         <input type="hidden" name="submitted_by_staff" value="<?= (int)$current_staff['id'] ?>">
         <?php endif; ?>
 
-        <!-- Branch + Date -->
         <div class="row g-3 mb-4">
             <div class="col-md-6">
                 <label class="form-label">Branch <span class="text-danger">*</span></label>
@@ -223,7 +258,6 @@ include 'includes/header.php';
             </div>
 
             <?php if (!$is_staff): ?>
-            <!-- Admin / Manager: show staff selector -->
             <div class="col-md-6">
                 <label class="form-label">Reported By</label>
                 <select name="submitted_by_staff" class="form-select">
@@ -239,7 +273,6 @@ include 'includes/header.php';
             <?php endif; ?>
         </div>
 
-        <!-- Products sold -->
         <div class="section-title mb-2">Products Sold</div>
         <div id="items-container"></div>
 
@@ -248,7 +281,6 @@ include 'includes/header.php';
             <i class="bi bi-plus-lg me-1"></i> Add Product
         </button>
 
-        <!-- Grand total -->
         <div class="grand-total-box mb-4">
             <div>
                 <div class="label">Total Amount</div>
@@ -268,7 +300,6 @@ include 'includes/header.php';
     </form>
 </div>
 
-<!-- Item row template -->
 <template id="itemTemplate">
     <div class="item-row-wrapper item-row">
         <button type="button" class="remove-row-btn" onclick="removeRow(this)" title="Remove">
