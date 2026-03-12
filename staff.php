@@ -195,3 +195,4 @@ function confirmDeleteStaff(dbId, name, sid) {
 <?php endif; ?>
 
 <?php include 'includes/footer.php'; ?>
+
