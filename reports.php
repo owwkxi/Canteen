@@ -116,9 +116,9 @@ $sales = $db->query("SELECT s.invoice_no, b.name AS branch_name,
     s.total_amount, s.sale_date, s.created_at,
     (SELECT COUNT(*) FROM sale_items WHERE sale_id=s.id) AS item_count,
     (SELECT SUM(quantity) FROM sale_items WHERE sale_id=s.id) AS units,
-    (SELECT p.name FROM sale_items si
-     JOIN products p ON p.id = si.product_id
-     WHERE si.sale_id = s.id ORDER BY si.id ASC LIMIT 1) AS item_name
+    (SELECT GROUP_CONCAT(CONCAT(p.name, ' -', si.quantity) ORDER BY si.id SEPARATOR ', ')
+    FROM sale_items si JOIN products p ON p.id = si.product_id
+    WHERE si.sale_id = s.id) AS item_name
     FROM sales s JOIN branches b ON b.id=s.branch_id
     $where ORDER BY s.sale_date DESC, s.created_at DESC
     LIMIT $per_page OFFSET $offset")->fetch_all(MYSQLI_ASSOC);
@@ -285,7 +285,7 @@ include 'includes/header.php';
     <table class="c-table">
         <thead>
             <tr>
-                <th>Sale No</th>
+                <th>Invoice No</th>
                 <th>Branch</th>
                 <th>Date</th>
                 <th>Item Name</th>
@@ -305,7 +305,7 @@ include 'includes/header.php';
                 </td>
                 <td><?= htmlspecialchars($sale['branch_name']) ?></td>
                 <td><?= date('M j, Y', strtotime($sale['sale_date'])) ?></td>
-                <td style="color:#888;"><?= htmlspecialchars($sale['item_name'] ?? '—') ?></td>
+                <td style="color:#555; font-size:.82rem; max-width:260px; white-space:normal;"> <?= htmlspecialchars($sale['item_name'] ?? '—') ?> </td>
                 <td style="color:#888;"><?= number_format($sale['units']) ?> pcs</td>
                 <td style="font-weight:700;">₱<?= number_format($sale['total_amount'], 2) ?></td>
                 <td style="color:#aaa;font-size:.82rem;"><?= date('g:iA', strtotime($sale['created_at'])) ?></td>
@@ -371,8 +371,8 @@ new Chart(document.getElementById('revenueChart'), {
 <div class="modal fade" id="deleteModal" tabindex="-1">
     <div class="modal-dialog modal-sm">
         <div class="modal-content">
-            <div class="modal-header border-0 pb-0">
-                <h5 class="modal-title" style="color:#C62828;">
+            <div class="modal-header border-0 pb-3">
+                <h5 class="modal-title" style="color:#FFFFFF;">
                     <i class="bi bi-trash3 me-2"></i>Delete Sale
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
