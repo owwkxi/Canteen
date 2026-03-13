@@ -29,8 +29,16 @@ if (($_SESSION["role"] ?? "") === "staff") {
 $page_title = 'Daily Reports – Canteen Management';
 $db = getDB();
 
+// ── Role flags ────────────────────────────────────────────────────────────────
+$is_cashier_staff = ($_SESSION['role'] ?? '') === 'staff' && ($_SESSION['job_role'] ?? '') === 'Cashier';
+$can_delete       = !$is_cashier_staff; // admins can delete; cashier staff cannot
+
 // ── Delete sale ───────────────────────────────────────────
 if (!empty($_GET['delete'])) {
+    if (!$can_delete) {
+        $_SESSION['toast'] = ['msg' => 'You do not have permission to delete records.', 'type' => 'error'];
+        header("Location: reports.php"); exit;
+    }
     $inv = $db->real_escape_string($_GET['delete']);
     $db->query("DELETE FROM sale_items WHERE sale_id = (SELECT id FROM sales WHERE invoice_no='$inv')");
     $db->query("DELETE FROM sales WHERE invoice_no='$inv'");
@@ -292,12 +300,12 @@ include 'includes/header.php';
                 <th>Units</th>
                 <th>Amount</th>
                 <th>Created</th>
-                <th>Action</th>
+                <?php if ($can_delete): ?><th>Action</th><?php endif; ?>
             </tr>
         </thead>
         <tbody>
             <?php if (empty($sales)): ?>
-            <tr><td colspan="8" class="text-center py-5 text-muted">No sales data for this period.</td></tr>
+            <tr><td colspan="<?= $can_delete ? 8 : 7 ?>" class="text-center py-5 text-muted">No sales data for this period.</td></tr>
             <?php else: foreach ($sales as $sale): ?>
             <tr>
                 <td style="font-weight:600;color:var(--maroon);">
@@ -309,6 +317,7 @@ include 'includes/header.php';
                 <td style="color:#888;"><?= number_format($sale['units']) ?> pcs</td>
                 <td style="font-weight:700;">₱<?= number_format($sale['total_amount'], 2) ?></td>
                 <td style="color:#aaa;font-size:.82rem;"><?= date('g:iA', strtotime($sale['created_at'])) ?></td>
+                <?php if ($can_delete): ?>
                 <td>
                     <button type="button" class="btn btn-sm"
                             style="background:#FFCDD2;color:#C62828;border-radius:6px;border:none;"
@@ -316,6 +325,7 @@ include 'includes/header.php';
                         Delete
                     </button>
                 </td>
+                <?php endif; ?>
             </tr>
             <?php endforeach; endif; ?>
         </tbody>
@@ -367,6 +377,7 @@ new Chart(document.getElementById('revenueChart'), {
 </script>
 <?php endif; ?>
 
+<?php if ($can_delete): ?>
 <!-- Delete Confirmation Modal -->
 <div class="modal fade" id="deleteModal" tabindex="-1">
     <div class="modal-dialog modal-sm">
@@ -403,5 +414,6 @@ function confirmDelete(invoice_no) {
     new bootstrap.Modal(document.getElementById('deleteModal')).show();
 }
 </script>
+<?php endif; ?>
 
 <?php include 'includes/footer.php'; ?>

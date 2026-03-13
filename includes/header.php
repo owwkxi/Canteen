@@ -1,23 +1,36 @@
 <?php
 $current_page = basename($_SERVER['PHP_SELF'], '.php');
 $_role        = userRole();   // 'staff' | 'admin' | 'super_admin'
+$_job_role    = $_SESSION['job_role'] ?? '';
+$_is_cashier  = $_role === 'staff' && $_job_role === 'Cashier';
 
-// Pages each role can access
-$staff_pages  = ['dashboard','products','add_product','edit_product',
-                 'stock','stock_branch','update_stock',
-                 'staff_attendance','attendance_history'];
-$admin_pages  = array_merge($staff_pages, ['staff','add_staff','edit_staff','view_staff']);
-$super_pages  = array_merge($admin_pages, ['reports','invoice','system_user']);
+// Pages ALL staff can access (any job role)
+$base_staff_pages = ['staff_attendance', 'attendance_history'];
 
-// Redirect if current page is not allowed for this role
+// Pages ONLY Cashier staff (and admins) can access
+$cashier_pages = ['dashboard', 'products', 'add_product', 'edit_product',
+                  'stock', 'stock_branch', 'update_stock',
+                  'reports', 'invoice'];
+
+// Build allowed list per role
+$staff_pages = $base_staff_pages;
+if ($_is_cashier) {
+    $staff_pages = array_merge($staff_pages, $cashier_pages);
+}
+
+$admin_pages = array_merge($base_staff_pages, $cashier_pages, ['staff', 'add_staff', 'edit_staff', 'view_staff']);
+$super_pages = array_merge($admin_pages, ['system_user']);
+
 $allowed = match($_role) {
     'super_admin' => $super_pages,
     'admin'       => $admin_pages,
-    default       => $staff_pages,   // staff
+    default       => $staff_pages,   // staff (cashier or non-cashier)
 };
+
 if (!in_array($current_page, $allowed)) {
     $_SESSION['toast'] = ['msg' => 'Access denied.', 'type' => 'error'];
-    header('Location: ' . BASE_URL . 'dashboard.php');
+    $redirect = (!$_is_cashier && $_role === 'staff') ? 'staff_attendance.php' : 'dashboard.php';
+    header('Location: ' . BASE_URL . $redirect);
     exit;
 }
 ?>
@@ -309,26 +322,32 @@ if (!in_array($current_page, $allowed)) {
 <nav class="sidebar">
     <ul class="nav-list">
 
-        <!-- Dashboard — ALL roles -->
+        <!-- Dashboard — Cashier staff + admins only -->
+        <?php if (hasRole('admin') || hasRole('super_admin') || $_is_cashier): ?>
         <li class="nav-item">
             <a href="dashboard.php" class="nav-link <?= $current_page === 'dashboard' ? 'active' : '' ?>">
                 <i class="bi bi-bar-chart-line"></i> Dashboard
             </a>
         </li>
+        <?php endif; ?>
 
-        <!-- Products — ALL roles -->
+        <!-- Products — Cashier staff + admins only -->
+        <?php if (hasRole('admin') || hasRole('super_admin') || $_is_cashier): ?>
         <li class="nav-item">
             <a href="products.php" class="nav-link <?= in_array($current_page, ['products','add_product','edit_product']) ? 'active' : '' ?>">
                 <i class="bi bi-box-seam"></i> Products
             </a>
         </li>
+        <?php endif; ?>
 
-        <!-- Stock Management — ALL roles -->
+        <!-- Stock Management — Cashier staff + admins only -->
+        <?php if (hasRole('admin') || hasRole('super_admin') || $_is_cashier): ?>
         <li class="nav-item">
             <a href="stock.php" class="nav-link <?= in_array($current_page, ['stock','stock_branch','update_stock']) ? 'active' : '' ?>">
                 <i class="bi bi-journal-text"></i> Stock Management
             </a>
         </li>
+        <?php endif; ?>
 
         <!-- Staff Management — admin & super_admin only -->
         <?php if (hasRole('admin')): ?>
@@ -362,8 +381,8 @@ if (!in_array($current_page, $allowed)) {
         </li>
         <?php endif; ?>
 
-        <!-- Daily Reports — super_admin only -->
-        <?php if (hasRole('super_admin')): ?>
+        <!-- Daily Reports — admin, super_admin, and Cashier staff -->
+        <?php if (hasRole('admin') || hasRole('super_admin') || $_is_cashier): ?>
         <li class="nav-item">
             <a href="reports.php" class="nav-link <?= in_array($current_page, ['reports','invoice']) ? 'active' : '' ?>">
                 <i class="bi bi-file-earmark-text"></i> Daily Reports
