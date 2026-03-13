@@ -77,7 +77,7 @@ include 'includes/header.php';
     <div class="col-lg-3">
         <div class="c-card p-4">
             <div class="section-title mb-3">Quick Actions</div>
-            <a href="invoice.php" class="quick-btn primary"><i class="bi bi-receipt me-2"></i>Record Product Sold</a>
+            <a href="invoice.php" class="quick-btn primary"><i class="bi bi-receipt me-2"></i>Invoice</a>
             <a href="add_product.php" class="quick-btn secondary">Add Product</a>
             <a href="stock.php" class="quick-btn secondary">Update Stock</a>
             <?php if (hasRole('admin')): ?>
